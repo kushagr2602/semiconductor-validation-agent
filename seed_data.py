@@ -1,5 +1,11 @@
-"""Seeds synthetic chip specs and test requirements. Run once after schema.sql."""
-from db import execute_validated
+"""Creates the schema and seeds synthetic chip specs and test requirements.
+
+Safe to run more than once: schema.sql uses CREATE TABLE IF NOT EXISTS, and
+seeding is skipped when chip_specs already has rows.
+"""
+from pathlib import Path
+
+from db import execute_validated, get_connection
 
 CHIPS = [
     ("EdgeCortex-9", "edge-ai", "BGA-256"),
@@ -19,7 +25,23 @@ REQUIREMENTS = [
 ]
 
 
+def create_schema():
+    """DDL, so it needs a raw connection -- execute_validated allows only SELECT/INSERT."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(Path(__file__).parent.joinpath("schema.sql").read_text())
+            conn.commit()
+    finally:
+        conn.close()
+    print("schema applied")
+
+
 def seed():
+    if execute_validated("select count(*) as n from chip_specs")[0]["n"]:
+        print("chip_specs already populated -- skipping seed")
+        return
+
     chip_ids = {}
     for name, market, package in CHIPS:
         rows = execute_validated(
@@ -40,4 +62,5 @@ def seed():
 
 
 if __name__ == "__main__":
+    create_schema()
     seed()
