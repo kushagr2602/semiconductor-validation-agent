@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NXP Validation Agent</title>
+<style>
+  :root {
+    --bg:#F2F5F7; --card:#FFFFFF; --sunk:#E8EDF0;
+    --ink:#12191F; --soft:#47555F; --faint:#7B8A94;
+    --rule:#D2DCE2; --rule-hard:#A9BAC4;
+    --accent:#0B6E7F; --accent-soft:#E0F0F3;
+    --pass:#2E7D32; --pass-bg:#D7F0DC;
+    --fail:#C62828; --fail-bg:#F8D7DA;
+    --shadow:0 1px 2px rgba(18,25,31,.06), 0 8px 24px -14px rgba(18,25,31,.22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0D1418; --card:#141D23; --sunk:#0A1013;
+      --ink:#E4EDF1; --soft:#A2B3BC; --faint:#6F828C;
+      --rule:#24333B; --rule-hard:#3C525D;
+      --accent:#4FB3C4; --accent-soft:#10333A;
+      --pass:#7BC98A; --pass-bg:#16301C;
+      --fail:#EF8A8A; --fail-bg:#3A1618;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -14px rgba(0,0,0,.7);
+    }
+  }
+  * { box-sizing:border-box; }
+  body {
+    background:var(--bg); color:var(--ink); margin:0;
+    padding:clamp(1.25rem,3vw,2.5rem) clamp(1rem,3vw,2rem) 5rem;
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono, .eyebrow, h1, h2, button, .pill, code, pre {
+    font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  .wrap { max-width:60rem; margin:0 auto; display:flex; flex-direction:column; gap:2rem; }
+
+  header { display:flex; flex-direction:column; gap:.4rem; }
+  .eyebrow {
+    font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; color:var(--accent);
+  }
+  h1 { font-size:clamp(1.4rem,3.5vw,1.9rem); font-weight:600; margin:0; letter-spacing:-.02em; }
+  header p { margin:0; color:var(--soft); font-size:.94rem; }
+
+  .card {
+    background:var(--card); border:1px solid var(--rule); border-radius:4px;
+    box-shadow:var(--shadow); padding:clamp(1rem,2.5vw,1.5rem);
+    display:flex; flex-direction:column; gap:1rem;
+  }
+  h2 {
+    font-size:.72rem; letter-spacing:.15em; text-transform:uppercase;
+    color:var(--accent); margin:0; display:flex; align-items:center; gap:.7rem;
+  }
+  h2::after { content:""; flex:1; height:1px; background:var(--rule); }
+
+  button {
+    background:var(--accent); color:var(--card); border:0; border-radius:3px;
+    padding:.5rem .9rem; font-size:.8rem; font-weight:600; cursor:pointer;
+    letter-spacing:.02em; transition:opacity .15s;
+  }
+  button:hover:not(:disabled) { opacity:.85; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.ghost { background:transparent; color:var(--accent); border:1px solid var(--rule-hard); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  .req {
+    display:grid; grid-template-columns:1fr auto; gap:.9rem; align-items:start;
+    padding:.85rem; background:var(--sunk); border-radius:3px;
+    border-left:3px solid var(--rule-hard);
+  }
+  .req.has-case { border-left-color:var(--accent); }
+  .req-meta { display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.35rem; align-items:center; }
+  .pill {
+    font-size:.65rem; letter-spacing:.08em; text-transform:uppercase;
+    padding:.15rem .45rem; border-radius:2px; background:var(--accent-soft);
+    color:var(--accent); border:1px solid var(--rule);
+  }
+  .pill.crit { background:var(--fail-bg); color:var(--fail); }
+  .req-text { font-size:.9rem; color:var(--soft); }
+  .list { display:flex; flex-direction:column; gap:.5rem; }
+
+  input[type=text] {
+    flex:1; min-width:0; padding:.6rem .8rem; border-radius:3px;
+    border:1px solid var(--rule-hard); background:var(--sunk); color:var(--ink);
+    font-size:.92rem; font-family:inherit;
+  }
+  .row { display:flex; gap:.6rem; flex-wrap:wrap; }
+
+  pre {
+    background:var(--sunk); border:1px solid var(--rule); border-radius:3px;
+    padding:.8rem 1rem; overflow-x:auto; margin:0; font-size:.8rem; line-height:1.65;
+    white-space:pre-wrap; word-break:break-word;
+  }
+  .label {
+    font-size:.65rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--faint); margin-bottom:.3rem;
+  }
+  .out { display:flex; flex-direction:column; gap:.85rem; }
+  .answer { font-size:.95rem; }
+  .err { color:var(--fail); font-size:.9rem; }
+  ol { margin:0; padding-left:1.3rem; font-size:.9rem; }
+  ol li { margin-bottom:.3rem; }
+  ol li::marker { color:var(--accent); }
+
+  .spin { color:var(--faint); font-size:.85rem; display:flex; align-items:center; gap:.5rem; }
+  .spin::before {
+    content:""; width:.7rem; height:.7rem; border:2px solid var(--rule-hard);
+    border-top-color:var(--accent); border-radius:50%; animation:sp .7s linear infinite;
+  }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion:reduce) { .spin::before { animation:none; } }
+
+  .diagram { overflow-x:auto; background:var(--sunk); border:1px solid var(--rule);
+    border-radius:3px; padding:1rem; }
+  .diagram svg { max-width:100%; height:auto; }
+  img { max-width:100%; height:auto; border-radius:3px; border:1px solid var(--rule); }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Semiconductor Validation · GenAI</div>
+    <h1>Validation Agent</h1>
+    <p>Test-plan generation, natural-language database queries, and automated reporting — over a live Postgres validation database.</p>
+  </header>
+
+  <!-- 1. requirements -->
+  <div class="card">
+    <h2>Requirements</h2>
+    <div id="reqs" class="list"><div class="spin">Loading requirements…</div></div>
+  </div>
+
+  <!-- 2. ask -->
+  <div class="card">
+    <h2>Ask the database</h2>
+    <div class="row">
+      <input type="text" id="q" placeholder="Which test cases have failing runs, and why?"
+             value="Which test cases have failing runs, and why?">
+      <button id="askBtn">Ask</button>
+    </div>
+    <div id="askOut" class="out"></div>
+  </div>
+
+  <!-- 3. report -->
+  <div class="card">
+    <h2>Report &amp; traceability</h2>
+    <div class="row">
+      <button id="repBtn">Generate report</button>
+    </div>
+    <div id="repOut" class="out"></div>
+  </div>
+
+</div>
+
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+mermaid.initialize({ startOnLoad:false, theme: dark ? "dark" : "neutral" });
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// The model often numbers its own steps; the <ol> numbers them too. Drop one.
+const stripNum = s => String(s).replace(/^\s*\d+\s*[.)]\s*/, "");
+
+async function post(url, body) {
+  const r = await fetch(url, {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body ?? {})
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+  return data;
+}
+
+/* ---------- requirements ---------- */
+async function loadReqs() {
+  try {
+    const reqs = await (await fetch("/api/requirements")).json();
+    $("reqs").innerHTML = reqs.map(r => `
+      <div class="req ${r.case_count > 0 ? "has-case" : ""}">
+        <div>
+          <div class="req-meta">
+            <span class="pill">${esc(r.chip_name)}</span>
+            <span class="pill">${esc(r.category)}</span>
+            <span class="pill ${r.priority === "critical" ? "crit" : ""}">${esc(r.priority)}</span>
+            ${r.case_count > 0 ? '<span class="pill">plan ready</span>' : ""}
+          </div>
+          <div class="req-text">${esc(r.requirement_text)}</div>
+          <div class="out" id="plan-${r.id}"></div>
+        </div>
+        <button class="ghost" data-req="${r.id}">
+          ${r.case_count > 0 ? "View plan" : "Generate plan"}
+        </button>
+      </div>`).join("");
+
+    $("reqs").querySelectorAll("button[data-req]").forEach(b =>
+      b.addEventListener("click", () => genPlan(b.dataset.req, b)));
+  } catch (e) {
+    $("reqs").innerHTML = `<div class="err">Could not load requirements: ${esc(e.message)}</div>`;
+  }
+}
+
+async function genPlan(id, btn) {
+  const out = $(`plan-${id}`);
+  btn.disabled = true;
+  out.innerHTML = `<div class="spin">Generating…</div>`;
+  try {
+    const p = await post("/api/test-plan", { requirement_id: Number(id) });
+    out.innerHTML = `
+      <div>
+        <div class="label">Test case #${p.test_case_id}</div>
+        <strong>${esc(p.title)}</strong>
+      </div>
+      <div><div class="label">Steps</div>
+        <ol>${p.steps.map(s => `<li>${esc(stripNum(s))}</li>`).join("")}</ol></div>
+      <div><div class="label">Expected result</div>
+        <div class="answer">${esc(p.expected_result)}</div></div>`;
+    btn.textContent = "View plan";
+    btn.closest(".req").classList.add("has-case");
+  } catch (e) {
+    out.innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ---------- ask ---------- */
+async function ask() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  $("askBtn").disabled = true;
+  $("askOut").innerHTML = `<div class="spin">Writing SQL, running it, reading the rows…</div>`;
+  try {
+    const r = await post("/api/ask", { question: q });
+    $("askOut").innerHTML = `
+      <div><div class="label">Generated SQL</div><pre>${esc(r.sql)}</pre></div>
+      ${r.error
+        ? `<div class="err">Blocked or failed: ${esc(r.error)}</div>`
+        : `<div><div class="label">Answer</div><div class="answer">${esc(r.answer)}</div></div>
+           <div><div class="label">${r.rows.length} row(s)</div>
+             <pre>${esc(JSON.stringify(r.rows, null, 2))}</pre></div>`}`;
+  } catch (e) {
+    $("askOut").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  } finally {
+    $("askBtn").disabled = false;
+  }
+}
+
+/* ---------- report ---------- */
+async function report() {
+  $("repBtn").disabled = true;
+  $("repOut").innerHTML = `<div class="spin">Querying runs, summarising, drawing…</div>`;
+  try {
+    const r = await post("/api/report");
+    $("repOut").innerHTML = `
+      <div><div class="label">Summary</div><div class="answer">${esc(r.summary)}</div></div>
+      <div><div class="label">Requirement traceability</div>
+        <div class="diagram"><pre class="mermaid">${esc(r.mermaid)}</pre></div></div>
+      <div><div class="label">Status breakdown</div>
+        <img src="/api/chart?t=${Date.now()}" alt="Validation runs by status"></div>`;
+    await mermaid.run({ nodes: $("repOut").querySelectorAll(".mermaid") });
+  } catch (e) {
+    $("repOut").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  } finally {
+    $("repBtn").disabled = false;
+  }
+}
+
+$("askBtn").addEventListener("click", ask);
+$("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+$("repBtn").addEventListener("click", report);
+loadReqs();
+</script>
+</body>
+</html>
