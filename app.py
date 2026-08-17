@@ -5,13 +5,15 @@ Same agent functions underneath -- this file only handles HTTP.
 
 Run: uv run uvicorn app:app --reload
 """
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import limits
 from db import execute_validated
 from maintenance_agent import ask as maintenance_ask
 from models import QueryResult, ReportResult, TestPlanResult
@@ -21,6 +23,28 @@ from test_plan_agent import generate_test_plan
 app = FastAPI(title="NXP Validation Agent")
 STATIC = Path(__file__).parent / "static"
 REPORTS = Path(__file__).parent / "reports"
+
+# Set DEMO_MODE=1 on the public deployment. It caps spend and refuses the one
+# operation that always costs a fresh LLM call (forced regeneration).
+DEMO_MODE = os.getenv("DEMO_MODE", "").lower() in {"1", "true", "yes"}
+
+
+def client_ip(request: Request) -> str:
+    """Real client IP. Hosting proxies put it first in X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def spend_guard(request: Request) -> None:
+    """Dependency for every endpoint that can trigger an OpenAI call."""
+    if not DEMO_MODE:
+        return
+    try:
+        limits.check_and_consume(client_ip(request))
+    except limits.RateLimited as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
 
 class AskRequest(BaseModel):
@@ -46,8 +70,20 @@ def list_requirements() -> list[dict]:
     )
 
 
+@app.get("/api/demo-status")
+def demo_status() -> dict:
+    """Lets the UI show the visitor what the limits are before they hit one."""
+    return {"demo_mode": DEMO_MODE, **(limits.usage() if DEMO_MODE else {})}
+
+
 @app.post("/api/test-plan")
-def api_test_plan(req: TestPlanRequest) -> TestPlanResult:
+def api_test_plan(req: TestPlanRequest, _=Depends(spend_guard)) -> TestPlanResult:
+    if DEMO_MODE and req.regenerate:
+        raise HTTPException(
+            status_code=403,
+            detail="Regeneration is disabled in the public demo -- it forces a fresh "
+                   "LLM call every time. Existing plans are shown instead.",
+        )
     try:
         return TestPlanResult(**generate_test_plan(req.requirement_id, regenerate=req.regenerate))
     except ValueError as exc:
@@ -55,14 +91,16 @@ def api_test_plan(req: TestPlanRequest) -> TestPlanResult:
 
 
 @app.post("/api/ask")
-def api_ask(req: AskRequest) -> QueryResult:
+def api_ask(req: AskRequest, _=Depends(spend_guard)) -> QueryResult:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
+    if len(req.question) > 500:
+        raise HTTPException(status_code=400, detail="Question is too long (500 character limit).")
     return QueryResult(**maintenance_ask(req.question))
 
 
 @app.post("/api/report")
-def api_report(days: int = 30) -> ReportResult:
+def api_report(days: int = 30, _=Depends(spend_guard)) -> ReportResult:
     return ReportResult(**generate_report(days=days))
 
 

@@ -1,0 +1,33 @@
+# Render blueprint for the public demo.
+#
+# Deploy: render.com -> New -> Blueprint -> pick this repo.
+# Then set the two secret env vars in the dashboard (marked sync:false below);
+# never put real keys in this file, it is committed.
+#
+# Free tier spins the instance down after ~15 minutes idle, so the first
+# request after a quiet period takes ~50s to wake. Fine for a portfolio link.
+services:
+  - type: web
+    name: nxp-validation-agent
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/demo-status
+    envVars:
+      # Caps spend and disables forced regeneration. Do not turn this off
+      # on a public URL -- the OpenAI key below pays for every visitor.
+      - key: DEMO_MODE
+        value: "1"
+      - key: DEMO_PER_IP_LIMIT
+        value: "10"
+      - key: DEMO_GLOBAL_DAILY_LIMIT
+        value: "200"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Set these in the Render dashboard, not here.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false

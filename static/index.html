@@ -117,6 +117,11 @@
   .diagram svg { max-width:100%; height:auto; }
   img { max-width:100%; height:auto; border-radius:3px; border:1px solid var(--rule); }
   .hidden { display:none; }
+  .demo-note {
+    background:var(--accent-soft); border:1px solid var(--rule-hard); border-radius:3px;
+    padding:.6rem .85rem; font-size:.82rem; color:var(--ink-soft); margin-top:.5rem;
+  }
+  .demo-note b { color:var(--accent); }
 </style>
 </head>
 <body>
@@ -126,6 +131,7 @@
     <div class="eyebrow">Semiconductor Validation · GenAI</div>
     <h1>Validation Agent</h1>
     <p>Test-plan generation, natural-language database queries, and automated reporting — over a live Postgres validation database.</p>
+    <div id="demoNote" class="hidden"></div>
   </header>
 
   <!-- 1. requirements -->
@@ -271,10 +277,25 @@ async function report() {
   }
 }
 
+/* ---------- demo limits notice ---------- */
+async function showDemoNote() {
+  try {
+    const s = await (await fetch("/api/demo-status")).json();
+    if (!s.demo_mode) return;
+    const el = $("demoNote");
+    el.className = "demo-note";
+    el.innerHTML = `<b>Public demo.</b> Live model calls are capped at
+      ${s.per_ip_limit} per visitor every ${s.per_ip_window_minutes} minutes
+      (${s.global_used}/${s.global_limit} used today). Clone the repo and run it
+      with your own OpenAI key for unlimited use.`;
+  } catch { /* not in demo mode, or offline -- no notice needed */ }
+}
+
 $("askBtn").addEventListener("click", ask);
 $("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
 $("repBtn").addEventListener("click", report);
 loadReqs();
+showDemoNote();
 </script>
 </body>
 </html>
