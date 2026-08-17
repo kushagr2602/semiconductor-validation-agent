@@ -8,8 +8,9 @@ Run: uv run uvicorn app:app --reload
 import os
 from pathlib import Path
 
+import openai
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,6 +22,38 @@ from report_agent import generate_report
 from test_plan_agent import generate_test_plan
 
 app = FastAPI(title="NXP Validation Agent")
+
+
+# A bare "Internal Server Error" hides the difference between a bad deployment
+# and a real bug. These map the failures a deployment actually hits onto
+# messages that name the cause. The key itself is never echoed.
+@app.exception_handler(openai.AuthenticationError)
+def _openai_auth_error(request: Request, exc: openai.AuthenticationError):
+    return JSONResponse(
+        status_code=502,
+        content={
+            "detail": "OpenAI rejected the API key. The deployment's OPENAI_API_KEY is "
+                      "set but not valid -- typically truncated on paste, revoked, or "
+                      "belonging to a different account.",
+            "fix": "Re-paste a current key into the host's environment settings.",
+        },
+    )
+
+
+@app.exception_handler(openai.RateLimitError)
+def _openai_rate_limit(request: Request, exc: openai.RateLimitError):
+    return JSONResponse(
+        status_code=502,
+        content={"detail": "OpenAI rate limit or quota exhausted for this account."},
+    )
+
+
+@app.exception_handler(openai.APIError)
+def _openai_api_error(request: Request, exc: openai.APIError):
+    return JSONResponse(
+        status_code=502,
+        content={"detail": f"OpenAI request failed: {type(exc).__name__}."},
+    )
 STATIC = Path(__file__).parent / "static"
 REPORTS = Path(__file__).parent / "reports"
 
