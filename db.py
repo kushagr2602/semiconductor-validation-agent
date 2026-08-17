@@ -14,6 +14,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Hosting dashboards routinely capture a trailing newline when a secret is
+# pasted. The OpenAI client sends the key verbatim, so that stray character
+# turns a valid key into a failing one. Strip the keys once, at import, before
+# any client is constructed -- db.py is imported by every agent.
+for _key_var in ("OPENAI_API_KEY", "DATABASE_URL"):
+    _val = os.environ.get(_key_var)
+    if _val and _val != _val.strip():
+        os.environ[_key_var] = _val.strip()
+
 # "with" allows read-only CTEs. Postgres does permit data-modifying CTEs
 # (with x as (delete ... returning *) select ...), but the keyword regex below
 # still catches those.

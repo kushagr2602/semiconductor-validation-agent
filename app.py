@@ -109,31 +109,6 @@ def demo_status() -> dict:
     return {"demo_mode": DEMO_MODE, **(limits.usage() if DEMO_MODE else {})}
 
 
-@app.get("/api/diag")
-def diag() -> dict:
-    """One-shot connectivity probe. Temporary -- reports whether the container
-    can reach OpenAI and how the key is shaped, without ever echoing it."""
-    import httpx
-
-    key = os.getenv("OPENAI_API_KEY", "")
-    out: dict = {
-        "key_present": bool(key),
-        "key_len": len(key),
-        "key_has_whitespace": key != key.strip() or any(c.isspace() for c in key),
-        "key_prefix": key[:8],
-    }
-    try:
-        r = httpx.get("https://api.openai.com/v1/models",
-                      headers={"Authorization": f"Bearer {key.strip()}"}, timeout=15)
-        out["openai_reachable"] = True
-        out["openai_status"] = r.status_code  # 200 = works, 401 = bad key
-    except Exception as exc:
-        out["openai_reachable"] = False
-        out["error_type"] = type(exc).__name__
-        out["error"] = str(exc)[:200]
-    return out
-
-
 @app.post("/api/test-plan")
 def api_test_plan(req: TestPlanRequest, _=Depends(spend_guard)) -> TestPlanResult:
     if DEMO_MODE and req.regenerate:
